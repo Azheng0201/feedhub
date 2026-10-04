@@ -36,6 +36,6 @@ def get_db():
 
 def init_db() -> None:
     """建表(幂等)。"""
-    from app import model  # noqa: F401 确保模型已注册到 Base.metadata
+    from app import models  # noqa: F401 确保模型已注册到 Base.metadata
 
     Base.metadata.create_all(bind=engine)
