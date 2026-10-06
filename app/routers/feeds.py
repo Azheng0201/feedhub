@@ -7,9 +7,38 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Feed
 from app.schemas import FeedCreate, FeedRead, FeedUpdate
+from app.services.fetcher import FetchError, fetch_feed
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/feeds", tags=["feeds"])
 
+
+class FetchResult(BaseModel):
+    """抓取结果。"""
+    feed_id: int
+    fetched: int
+    created: int
+    skipped: int
+    message: str = ""
+
+
+@router.post("/{feed_id}/fetch", response_model=FetchResult)
+def fetch_one_feed(feed_id: int, db: Session = Depends(get_db)):
+    """
+    抓取指定源的最新文章。
+    """
+    feed = _get_feed_or_404(db, feed_id)
+    try:
+        stats = fetch_feed(db, feed)
+    except FetchError as e:
+        # 抓取失败用 502 Bad GateWay, 表示"上游有问题"
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return {
+        "feed_id": feed_id,
+        "message": f"✅ 抓取完成",
+        **stats,
+    }
 
 def _get_feed_or_404(db: Session, feed_id: int) -> Feed:
     """获取 Feed 或抛出 404"""
