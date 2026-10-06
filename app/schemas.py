@@ -47,12 +47,47 @@ class ArticleBase(BaseModel):
     published_at: datetime | None = None
 
 
+class ArticleUpdate(BaseModel):
+    """Patch /articles/{id} 的请求体: 只允许改读/收藏状态。"""
+    is_read:    bool | None = None
+    is_starred: bool | None = None
+
+
 class ArticleRead(ArticleBase):
     """GET 返回的 Article 结构。"""
-    id: int
-    feed_id: int
-    fetched_at: datetime
-    is_read: bool
-    is_starred: bool
+    id:           int
+    feed_id:      int
+    title:        str
+    link:         str
+    summary:      str
+    author:       str
+    published_at: datetime | None = None
+    fetched_at:   datetime
+    is_read:      bool
+    is_starred:   bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ArticleDetailRead(ArticleRead):
+    """详情：多带正文 + feed 标题。"""
+    content:    str
+    feed_title: str = ""
+
+
+# ---------- 分页包装 ----------
+
+class PageMeta(BaseModel):
+    """通用分页元信息。"""
+    page:     int
+    size:     int
+    total:    int
+    pages:    int
+    has_next: bool
+    has_prev: bool
+
+
+class ArticlePage(BaseModel):
+    """分页响应：items + meta。"""
+    meta: PageMeta
+    items: list[ArticleRead]
