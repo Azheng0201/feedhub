@@ -1,5 +1,6 @@
-"""RSS 抓取服务。"""
-import time
+"""RSS 抓取服务。支持单源和批量。"""
+import asyncio
+import re
 from datetime import datetime, timezone
 from html import unescape
 
@@ -38,7 +39,6 @@ def _strip_html(text: str, limit: int = 2000) -> str:
     if not text:
         return ""
     # 先 unescape，再简单正则去标签
-    import re
     text = unescape(text)
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text).strip()
@@ -73,43 +73,48 @@ def _pick_published(entry) -> datetime | None:
     return None
 
 
-# ---------- 主流程 ----------
+# ---------- 同步：单源抓取 ----------
 
-def fetch_feed(db: Session, feed: Feed) -> dict:
-    """
-    抓取一个 feed 的所有文章，去重入库。
-    返回 {"fetched": 抓到多少条, "created": 新增多少条, "skipped": 重复多少条}
-    """
-    # 1. 抓 HTTP
+def _http_client() -> httpx.Client:
+    """同步 httpx 客户端。"""
+    return httpx.Client(
+        timeout=FETCH_TIMEOUT,
+        headers={"User-Agent": USER_AGENT},
+        follow_redirects=True,
+    )
+
+
+def _fetch_raw_sync(url: str) -> bytes:
+    """同步抓一个 URL, 返回 bytes。失败抛 FetchError。"""
     try:
-        with httpx.Client(timeout=FETCH_TIMEOUT,
-                          headers={"User-Agent": USER_AGENT},
-                          follow_redirects=True) as client:
-            resp = client.get(feed.url)
+        with _http_client() as client:
+            resp = client.get(url)
             resp.raise_for_status()
-            raw = resp.content
+            return resp.content
     except httpx.HTTPStatusError as e:
-        raise FetchError(f"HTTP {e.response.status_code}: {feed.url}")
+        raise FetchError(f"HTTP {e.response.status_code}: {url}")
     except httpx.RequestError as e:
         raise FetchError(f"网络错误：{e}")
 
-    # 2. 解析
+
+def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
+    """
+    解析 RSS bytes，入库去重。
+    返回 {"fetched": N, "created": N, "skipped": N}
+    """
     parsed = feedparser.parse(raw)
     if parsed.bozo and not parsed.entries:
         raise FetchError(f"RSS 解析失败：{parsed.bozo_exception}")
 
-    # 3. 更新源信息
+    # 更新源信息
     if parsed.feed:
-        title = getattr(parsed.feed, "title", "") or feed.title
-        site_url = getattr(parsed.feed, "link", "") or feed.site_url
+        feed.title = getattr(parsed.feed, "title", "") or feed.title
+        feed.site_url = getattr(parsed.feed, "site_url", "") or feed.site_url
         desc = (getattr(parsed.feed, "subtitle", "")
                 or getattr(parsed.feed, "description", "")
                 or feed.description)
-        feed.title = title
-        feed.site_url = site_url
         feed.description = _strip_html(desc, limit=500)
 
-    # 4. 遍历 entry 入库
     created = 0
     skipped = 0
     for entry in parsed.entries:
@@ -118,7 +123,6 @@ def fetch_feed(db: Session, feed: Feed) -> dict:
         if not link or not title:
             continue
 
-        # 先查去重
         exists = db.execute(
             select(Article).where(
                 Article.feed_id == feed.id,
@@ -129,7 +133,7 @@ def fetch_feed(db: Session, feed: Feed) -> dict:
             skipped += 1
             continue
 
-        article = Article(
+        db.add(Article(
             feed_id=feed.id,
             title=title[:512],
             link=link[:1024],
@@ -137,19 +141,89 @@ def fetch_feed(db: Session, feed: Feed) -> dict:
             content=_pick_content(entry)[:50000],
             author=(getattr(entry, "author", "") or "")[:128],
             published_at=_pick_published(entry),
-        )
-        db.add(article)
+        ))
         created += 1
 
     feed.last_fetched_at = datetime.now(timezone.utc)
+
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise FetchError("抓取时遇到并发冲突，请重试")
+        raise FetchError("入库时遇到并发冲突，请重试")
 
     return {
         "fetched": len(parsed.entries),
         "created": created,
         "skipped": skipped,
     }
+
+
+
+def fetch_feed(db: Session, feed: Feed) -> dict:
+    """单源同步抓取。"""
+    raw = _fetch_raw_sync(feed.url)
+    return _parse_and_store(db, feed, raw)
+
+
+# ---------- 异步：批量并发抓 HTTP ----------
+
+async def _fetch_raw_async(client: httpx.AsyncClient, url: str) -> bytes:
+    """异步抓一个 URL, 返回 bytes。"""
+    try:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        return resp.content
+    except httpx.HTTPStatusError as e:
+        raise FetchError(f"HTTP {e.response.status_code}: {url}")
+    except httpx.RequestError as e:
+        raise FetchError(f"网络错误：{e}")
+
+
+async def _fetch_all_raw(feeds: list[Feed]) -> list[bytes]:
+    """
+    并发抓所有 feed 的 HTTP, 返回和 feeds 等长的列表。
+    """
+    async with httpx.AsyncClient(
+        timeout=FETCH_TIMEOUT,
+        headers={"User-Agent": USER_AGENT},
+        follow_redirects=True,
+    ) as client:
+        tasks = [_fetch_raw_async(client, f.url) for f in feeds]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def fetch_feeds_concurrent(db: Session, feeds: list[Feed]) -> list[dict]:
+    """
+    批量并发抓取。HTTP 并发，DB 串行。
+    """
+    if not feeds:
+        return []
+
+    raw_results = await _fetch_all_raw(feeds)
+
+    output: list[dict] = []
+    for feed, result in zip(feeds, raw_results):
+        if isinstance(result, BaseException):
+            err = str(result) if not isinstance(result, FetchError) else str(result)
+            output.append({
+                "feed_id": feed.id, "ok": False,
+                "fetched": 0, "created": 0, "skipped": 0,
+                "error": err,
+            })
+            continue
+
+        try:
+            stats = _parse_and_store(db, feed, result)
+            output.append({
+                "feed_id": feed.id, "ok": True,
+                "error": None, **stats,
+            })
+        except FetchError as e:
+            output.append({
+                "feed_id": feed.id, "ok": False,
+                "fetched": 0, "created": 0, "skipped": 0,
+                "error": str(e),
+            })
+
+    return output

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Feed
 from app.schemas import FeedCreate, FeedRead, FeedUpdate
-from app.services.fetcher import FetchError, fetch_feed
+from app.services.fetcher import FetchError, fetch_feed, fetch_feeds_concurrent
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/feeds", tags=["feeds"])
@@ -20,6 +20,53 @@ class FetchResult(BaseModel):
     created: int
     skipped: int
     message: str = ""
+
+
+class FeedFetchResult(BaseModel):
+    """单个源的抓取结果。"""
+    feed_id: int
+    ok: bool
+    fetched: int
+    created: int
+    skipped: int
+    error: str | None = None
+
+
+class FetchAllResult(BaseModel):
+    """批量抓取汇总。"""
+    total: int
+    successed: int
+    failed: int
+    elapsed_ms: int
+    results: list[FeedFetchResult]
+
+
+@router.post("/fetch-all", response_model=FetchAllResult)
+async def fetch_all(db: Session = Depends(get_db)):
+    """
+    并发抓取所有源。
+    """
+    import time
+    t0 = time.perf_counter()
+
+    feeds = db.execute(select(Feed)).scalars().all()
+    if not feeds:
+        return {
+            "total": 0, "successed": 0, "failed": 0,
+            "elapsed_ms": 0, "results": [],
+        }
+
+    results = await fetch_feeds_concurrent(db, feeds)
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+
+    successed = sum(1 for r in results if r["ok"])
+    return {
+        "total": len(results),
+        "successed": successed,
+        "failed": len(results) - successed,
+        "elapsed_ms": elapsed_ms,
+        "results": results,
+    }
 
 
 @router.post("/{feed_id}/fetch", response_model=FetchResult)
