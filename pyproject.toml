@@ -1,0 +1,25 @@
+[project]
+name = "feedhub"
+version = "0.1.0"
+description = "RSS 聚合阅读器"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "app/__init__.py",
+    "app/routers/__init__.py",
+    "app/services/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

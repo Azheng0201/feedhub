@@ -133,4 +133,4 @@ def mark_all_read(
         a.is_read = True
 
     db.commit()
-    return {"uppdated": len(articles)}
+    return {"updated": len(articles)}

@@ -109,7 +109,12 @@ def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
     # 更新源信息
     if parsed.feed:
         feed.title = getattr(parsed.feed, "title", "") or feed.title
-        feed.site_url = getattr(parsed.feed, "site_url", "") or feed.site_url
+        site_url = getattr(parsed.feed, "link", "")
+        if not site_url:
+            links = getattr(parsed.feed, "links", [])
+            if links and isinstance(links, list) and isinstance(links[0], dict):
+                site_url = links[0].get("href", "")
+        feed.site_url = site_url or feed.site_url
         desc = (getattr(parsed.feed, "subtitle", "")
                 or getattr(parsed.feed, "description", "")
                 or feed.description)
