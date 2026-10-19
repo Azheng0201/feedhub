@@ -3,12 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.db import get_db
 from app.models import Feed
 from app.schemas import FeedCreate, FeedRead, FeedUpdate
 from app.services.fetcher import FetchError, fetch_feed, fetch_feeds_concurrent
-from pydantic import BaseModel
+from app.services.scheduler import scheduler, scheduled_fetch_all
 
 router = APIRouter(prefix="/feeds", tags=["feeds"])
 
@@ -162,3 +163,26 @@ def delete_feed(feed_id: int, db: Session = Depends(get_db)):
     db.delete(feed)
     db.commit()
     return None
+
+
+@router.get("/scheduler/jobs", tags=["scheduler"])
+def get_scheduler_jobs():
+    """查看当前的定时任务列表。"""
+    jobs = scheduler.get_jobs()
+    return [
+        {
+            "id": job.id,
+            "name": job.name,
+            "next_run_time": job.next_run_time,
+        }
+        for job in jobs
+    ]
+
+
+@router.post("/scheduler/run-now", tags=["scheduler"])
+async def trigger_fetch_now():
+    """立即在后台触发一次全量抓取。"""
+    # 用 create_task 放到后台跑，不阻塞当前请求
+    import asyncio
+    asyncio.create_task(scheduled_fetch_all())
+    return {"status": "started", "message": "后台抓取任务已触发，请查看控制台日志"}
