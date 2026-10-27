@@ -2,12 +2,26 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session, joinedload
+from pydantic import BaseModel
+from datetime import datetime, timedelta, timezone
 
 from app.db import get_db
 from app.models import Article, Feed
 from app.schemas import (
     ArticleDetailRead, ArticlePage, ArticleRead, ArticleUpdate, PageMeta,
 )
+
+class StatsResponse(BaseModel):
+    total: int
+    unread: int
+    starred: int
+    feeds_count: int
+    per_feed: list[dict]
+
+
+class CleanResponse(BaseModel):
+    deleted_count: int
+    message: str
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
@@ -18,6 +32,70 @@ def _get_article_or_404(db: Session, article_id: int) -> Article:
     if article is None:
         raise HTTPException(status_code=404, detail=f"Article {article_id} 不存在")
     return article
+
+
+@router.get("/stats", response_model=StatsResponse)
+def get_stats(db: Session = Depends(get_db)):
+    """
+    文章统计聚合。
+    """
+    total = db.execute(select(func.count(Article.id))).scalar_one()
+    unread = db.execute(select(func.count(Article.id)).where(Article.is_read == False)).scalar_one()
+    starred = db.execute(select(func.count(Article.id)).where(Article.is_starred == True)).scalar_one()
+    feeds_count = db.execute(select(func.count(Feed.id))).scalar_one()
+
+    # 按源分组统计文章数
+    feeds_stats_stmt = (
+        select(Feed.title, func.count(Article.id).label("count"))
+        .outerjoin(Article)
+        .group_by(Feed.id)
+        .order_by(func.count(Article.id).desc())
+    )
+    per_feed_rows = db.execute(feeds_stats_stmt).all()
+
+    per_feed = [
+        {"feed_title": row[0], "count": row[1]}
+        for row in per_feed_rows
+    ]
+
+    return {
+        "total": total,
+        "unread": unread,
+        "starred": starred,
+        "feeds_count": feeds_count,
+        "per_feed": per_feed
+    }
+
+
+@router.delete("/clean", response_model=CleanResponse)
+def clean_old_articles(
+    days: int = Query(30, ge=1, description="清理多少天前的已读文章"),
+    db: Session = Depends(get_db)
+):
+    """
+    清理超过 N 天的文章。
+    """
+    # 使用 replace(tzinfo=None) 去掉时区，变成Naive datetime 
+    # 因为SQLite 存入的时间格式默认是不带时区的字符串Naive datetime 
+    
+    cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+
+    stmt = select(Article).where(
+        Article.published_at < cutoff_date,
+        Article.is_read == True,
+        Article.is_starred == False
+    )
+    articles_to_delete = db.execute(stmt).scalars().all()
+    count = len(articles_to_delete)
+
+    if count == 0:
+        return {"deleted_count": 0, "message": f"没有发现 {days} 天前的已读文章"}
+
+    for a in articles_to_delete:
+        db.delete(a)
+    db.commit()
+
+    return {"deleted_count": count, "message": f"成功清理了 {count} 篇旧文章"}
 
 
 @router.get("", response_model=ArticlePage)
@@ -53,7 +131,7 @@ def list_articles(
     total = db.execute(count_stmt).scalar_one()
 
     # 3. 分页查询
-    stmt = select(Article)
+    stmt = select(Article).options(joinedload(Article.feed))
     if conditions:
         stmt = stmt.where(*conditions)
     # 优先按发布时间倒序, 没有发布时间的排在后面
@@ -65,6 +143,16 @@ def list_articles(
 
     rows = db.execute(stmt).scalars().all()
 
+    items = []
+    for a in rows:
+        item_dict = {k: getattr(a, k) for k in [
+            "id", "feed_id", "title", "link", "summary", "author",
+            "published_at", "fetched_at", "is_read", "is_starred"
+        ]}
+        item_dict["feed_title"] = a.feed.title if a.feed else ""
+        items.append(item_dict)
+    
+
     # 4. 组装 meta
     pages = max(1, (total + size - 1) // size)
     meta = PageMeta(
@@ -73,7 +161,7 @@ def list_articles(
         has_prev = page > 1,
     )
 
-    return {"items": rows, "meta": meta}
+    return {"items": items, "meta": meta}
 
 
 @router.get("/{article_id}", response_model=ArticleDetailRead)

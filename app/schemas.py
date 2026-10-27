@@ -57,6 +57,7 @@ class ArticleRead(ArticleBase):
     """GET 返回的 Article 结构。"""
     id:           int
     feed_id:      int
+    feed_title:   str = ""
     title:        str
     link:         str
     summary:      str

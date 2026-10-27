@@ -116,3 +116,44 @@ def test_mark_all_read_for_feed(client, make_feed, make_article):
     assert r["updated"] == 1
     r2 = client.get("/articles?is_read=false").json()
     assert r2["meta"]["total"] == 1
+
+
+def test_list_articles_includes_feed_title(client, make_feed, make_article):
+    f = make_feed(title = "测试源标题")
+    make_article(f, title="文章A", link="http://ex.com/a")
+
+    r = client.get("/articles").json()
+    assert r["items"][0]["feed_title"] == "测试源标题"
+
+
+def test_get_stats(client, make_feed, make_article):
+    f = make_feed()
+    make_article(f, title="文章1", is_read=False) 
+    make_article(f, title="文章2", is_read=True, is_starred=True)
+    r = client.get("/articles/stats").json()
+    assert r["total"] == 2
+    assert r["unread"] == 1
+    assert r["starred"] == 1
+    assert r["feeds_count"] == 1
+    assert r["per_feed"][0]["count"] == 2
+
+
+def test_clean_old_articles(client, make_feed, make_article, db_session):
+    from datetime import datetime, timezone, timedelta
+    f = make_feed()
+
+    old_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=40)
+    old_a = make_article(f, title="旧文章", link="https://ex.com/old", is_read=True)
+    old_a.published_at = old_date
+    db_session.commit()
+
+    star_a = make_article(f, title="收藏旧文章", link="https://ex.com/star", is_read=True, is_starred=True)
+    star_a.published_at = old_date
+    db_session.commit()
+
+    make_article(f, title="新文章", link="https://ex.com/new", is_read=True)
+
+    r = client.delete("/articles/clean?days=30").json()
+    assert r["deleted_count"] == 1
+
+    assert client.get("/articles/stats").json()["total"] == 2
