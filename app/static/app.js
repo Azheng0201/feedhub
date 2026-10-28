@@ -63,6 +63,8 @@ function renderArticles(items) {
     for (const item of items) {
         const statusClass = item.is_read ? "read" : "unread";
         const starIcon = item.is_starred ? "bi-star-fill text-warning" : "bi-star";
+        const isReadIcon = item.is_read ? 'bi-envelope' : 'bi-envelope-open';
+        const isReadTitle = item.is_read ? '标为未读' : '标为已读';
         html += `
             <div class="feed-item ${statusClass} p-3 d-flex justify-content-between align-items-center" id="article-${item.id}">
                 <div class="me-3 flex-grow-1">
@@ -70,7 +72,7 @@ function renderArticles(items) {
                         <span class="badge bg-secondary">${item.feed_title || "未知源"}</span>
                         <span class="ms-2"><i class="bi bi-clock"></i>${formatDate(item.published_at || item.fetched_at)}</span>
                     </div>
-                    <a href="${item.link}" target="_blank" class="feed-title d-block text-truncate mb-1" style="max-width: 800px;">
+                    <a href="#" class="feed-title d-block text-truncate mb-1" style="max-width: 800px;" onclick="openArticle(${item.id}, event)">
                         ${item.title}
                     </a>
                     <div class="text-muted small text-truncate" style="max-width: 800px;">
@@ -83,8 +85,8 @@ function renderArticles(items) {
                         <i class="bi ${starIcon}"></i>
                     </button>
                     <!-- 标记已读按钮 -->
-                    <button class="btn btn-sm btn-light border-0" onclick="toggleRead(${item.id}, ${!item.is_read})">
-                        <i class="bi ${item.is_read ? 'bi-envelope': 'bi-envelope-open'}"></i>
+                    <button class="btn btn-sm btn-light border-0" onclick="toggleRead(${item.id}, ${!item.is_read})" title="${isReadTitle}">
+                        <i class="bi ${isReadIcon}"></i>
                     </button>
                 </div>
             </div>
@@ -122,6 +124,49 @@ function renderPagination(meta) {
 }
 
 // 交互操作
+// 详情弹窗
+let articleModalInstance = null;
+
+async function openArticle(id, event) {
+    console.log("id = ", id);
+    if (event) event.preventDefault();
+
+    // 1. 初始化 Modal 实例
+    if (!articleModalInstance) {
+        articleModalInstance = new bootstrap.Modal(document.getElementById('articleModal'));
+    }
+
+    const titleEl = document.getElementById("modal-title");
+    const bodyEl = document.getElementById("modal-body");
+    const metaEl = document.getElementById("modal-meta");
+    const linkEl = document.getElementById("modal-link");
+
+    titleEl.innerText = "加载中...";
+    bodyEl.innerHTML = `<div class="text-center py-5"><span class="spinner-border"></span></div>`;
+    articleModalInstance.show();
+
+    try{
+        // 2. 请求详情接口
+        const res = await fetch(`${API_BASE}/${id}`);
+        if (!res.ok) throw new Error("获取详情失败");
+        const data = await res.json();
+
+        titleEl.innerText = data.title;
+        metaEl.innerText = `来自 ${data.feed_title} | ${formatDate(data.published_at || data.fetched_at)}`;
+        linkEl.href = data.link;
+
+        // 3. 渲染正文
+        bodyEl.innerHTML = data.content || data.summary || "<p class='text-muted'>暂无正文</p>";
+
+        // 4. 如果未读，自动标记为已读并刷新列表
+        if(!data.is_read) {
+            await toggleRead(id, true);
+        }
+    } catch (err) {
+        bodyEl.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+    }
+}
+
 function changePage(page) {
     if (page < 1 || page > state.totalPages) return;
     state.page = page;
@@ -189,6 +234,28 @@ document.addEventListener("DOMContentLoaded", () => {
             alert("后台抓取任务已触发，稍等几秒后刷新页面看看！");
         } catch (err) {
             alert("触发失败");
+        } finally {
+            btn.innerHTML = origHtml;
+            btn.disabled = false;
+        }
+    });
+
+    // 绑定一键已读按钮
+    document.getElementById("btn-mark-all-read").addEventListener("click", async (e) => {
+        if (!confirm("确定要把所有文章标记为已读吗？")) return;
+
+        const btn = e.currentTarget;
+        const origHtml = btn.innerHTML;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 处理中...`;
+        btn.disabled = true;
+
+        try{
+            const res = await fetch(`/articles/mark-all-read`, { method: "POST" });
+            const data = await res.json();
+            alert(`已标记 ${data.updated} 篇文章为已读`);
+            fetchArticles();
+        } catch (err) {
+            alert("操作失败");
         } finally {
             btn.innerHTML = origHtml;
             btn.disabled = false;

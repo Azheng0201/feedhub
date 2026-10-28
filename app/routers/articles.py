@@ -197,6 +197,12 @@ def update_article(article_id: int, payload: ArticleUpdate,
     for key, value in data.items():
         setattr(article, key, value)
 
+    if "is_read" in data:
+        if data["is_read"]:
+            article.read_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        else:
+            article.read_at = None
+
     db.commit()
     db.refresh(article)
     return article

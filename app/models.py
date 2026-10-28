@@ -45,6 +45,7 @@ class Article(Base):
     fetched_at:   Mapped[datetime]        = mapped_column(default=datetime.now(timezone.utc))
 
     is_read:    Mapped[bool] = mapped_column(default=False, index=True)
+    read_at:    Mapped[datetime | None] = mapped_column(default=None)
     is_starred: Mapped[bool] = mapped_column(default=False, index=True)
 
     feed: Mapped["Feed"] = relationship(back_populates="articles")

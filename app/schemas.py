@@ -65,6 +65,7 @@ class ArticleRead(ArticleBase):
     published_at: datetime | None = None
     fetched_at:   datetime
     is_read:      bool
+    read_at:      datetime | None = None
     is_starred:   bool
 
     model_config = ConfigDict(from_attributes=True)
