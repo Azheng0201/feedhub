@@ -4,6 +4,8 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 
 from app.db import init_db
 from app.routers import articles, feeds
@@ -41,6 +43,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# 挂载静态文件目录
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
 # === 添加 CORS 中间件
 app.add_middleware(
     CORSMiddleware,
@@ -53,6 +58,11 @@ app.add_middleware(
 app.include_router(feeds.router)
 app.include_router(articles.router)
 
+@app.get("/", include_in_schema=False)
+def root():
+    """访问根路径时，直接跳转到静态页。"""
+    return RedirectResponse(url="/static/index.html")
+
 @app.get("/health", tags=["system"])
 def health():
     """健康检查。"""
@@ -61,9 +71,3 @@ def health():
         "service": "FeedHub",
         "version": app.version,
     }
-
-
-@app.get("/", tags=["system"])
-def root():
-    """根路由。"""
-    return {"message": "FeedHub API. 文档见 /docs"}

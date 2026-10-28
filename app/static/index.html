@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FeedHub - 我的 RSS 阅读器</title>
+    <!-- 引入 Bootstrap 5 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- 引入 Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .feed-item { border-bottom: 1px solid #eee; transition: background 0.2s; }
+        .feed-item:hover { background-color: #f1f3f5; }
+        .feed-item.unread { background-color: #fff; }
+        .feed-item.unread .feed-title { font-weight: 600; color: #0d6efd; }
+        .feed-item.read { opacity: 0,7; }
+        .feed-title { font-size: 1.1rem; text-decoration: none; color: #212529; }
+        .feed-title:hover { text-decoration: underline; }
+        .sidebar { height: 100vh; position: sticky; top: 0; }
+        .cursor-pointer { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 左侧栏 -->
+            <nav class="col-md-3 col-lg-2 d-md-block bg-white sidebar border-end p-3">
+                <a href="/" class="d-flex align-item-center mb-3 mb-md-0 me-md-auto link-dark text-decoration-none">
+                    <span class="fs-4 fw-bold text-primary">📡 FeedHub</span>
+                </a>
+                <hr>
+                <ul class="nav nav-pills flex-column mb-auto" id="filter-nav">
+                    <li class="nav-item">
+                        <a href="#" class="nav-link active" data-filter="all">
+                            <i class="bi bi-collection"></i> 全部文章
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link link-dark" data-filter="unread">
+                            <i class="bi bi-envelope"></i> 未读
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link link-dark" data-filter="starred">
+                            <i class="bi bi-star"></i> 收藏
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <!-- 右侧主区域 -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 py-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2 id="page-title" class="h3 mb-0">全部文章</h2>
+                    <button class="btn btn-outline-primary btn-sm" id="btn-refresh">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新抓取
+                    </button>
+                </div>
+
+                <!-- 文章列表容器 -->
+                <div id="articles-container" class="bg-white rounded shadow-sm">
+                    <!-- 文章由 JS 动态渲染 -->
+                    <div class="text-center p-5 text-muted">加载中...</div>
+                </div>
+
+                <!-- 分页 -->
+                <nav class="mt-4">
+                    <ul class="pagination justify-content-center" id="pagination">
+                        <!-- 分页由 JS 动态渲染 -->
+                    </ul>
+                </nav>
+            </main>
+        </div>
+    </div>
+
+    <!-- 引入 JS -->
+    <script src="app.js"></script>
+</body>
+</html>
