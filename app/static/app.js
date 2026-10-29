@@ -192,6 +192,126 @@ async function toggleRead(id, newState) {
     fetchArticles();
 }
 
+// 视图切换
+
+function showListView() {
+    document.getElementById("view-nav").querySelector(".nav-link").classList.remove("active");
+    document.getElementById("view-nav").querySelector(".nav-link").classList.add("link-dark");
+
+    document.getElementById("dashboard-container").classList.add("d-none");
+    document.getElementById("articles-container").classList.remove("d-none");
+    document.getElementById("pagination").classList.remove("d-none");
+    document.getElementById("page-title").innerText = "全部文章";
+
+    // 如果从看板切回来，刷新列表
+    fetchArticles();
+}
+
+function showDashboardView() {
+    document.getElementById("view-nav").querySelector(".nav-link").classList.add("active");
+    document.getElementById("view-nav").querySelector(".nav-link").classList.remove("link-dark");
+
+    // 隐藏侧边栏的筛选高亮
+    document.querySelectorAll("#filter-nav .nav-link").forEach(n => {
+        n.classList.remove("active");
+        n.classList.add("link-dark");
+    });
+
+    document.getElementById("articles-container").classList.add("d-none");
+    document.getElementById("pagination").classList.add("d-none");
+    document.getElementById("dashboard-container").classList.remove("d-none");
+    document.getElementById("page-title").innerText = "数据看板";
+
+    fetchAndRenderDashboard();
+}
+
+// 看板图表
+
+let pieChartInstance = null;
+let barChartInstance = null;
+
+async function fetchAndRenderDashboard() {
+    try{
+        const res = await fetch("/articles/stats");
+        if (!res.ok) throw new Error("获取统计数据失败");
+        const data = await res.json();
+
+        renderPieChart(data.per_feed);
+        renderBarChart(data);
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+function renderPieChart(perFeed) {
+    const ctx = document.getElementById("pieChart").getContext("2d");
+
+    if (pieChartInstance) pieChartInstance.destory();
+
+    // 标签和数据
+    const labels = perFeed.map(x => x.feed_title || "未知源");
+    const counts = perFeed.map(x => x.count);
+
+    if (labels.length === 0) {
+        labels.push("暂无数据");
+        counts.push(1);
+    }
+    
+    pieChartInstance = new Chart(ctx, {
+        type: "doughnut", // 环形图
+        data: {
+            labels: labels,
+            datasets: [{
+                data: counts,
+                backgroundColor: [
+                    "#0d6efd", "#198754", "#ffc107", "#dc3545", "#6f42c1", "#fd7e14"
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: "bottom" }
+            }
+        }
+    });
+}
+
+function renderBarChart(stats) {
+    const ctx = document.getElementById("barChart").getContext("2d");
+    if (barChartInstance) barChartInstance.destory();
+
+    const unread = stats.unread;
+    const read = stats.total - stats.unread;
+
+    barChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: ["总文章", "已读", "未读", "收藏"],
+            datasets: [{
+                label: "文章数量",
+                data: [stats.total, read, unread, stats.starred],
+                backgroundColor: [
+                    "#6c757d", "#198754", "#0d6efd", "#ffc107"
+                ],
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 5 } }
+            }
+        }
+    });
+}
+
 // 初始化与事件绑定
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -214,6 +334,11 @@ document.addEventListener("DOMContentLoaded", () => {
             // 更新状态并请求
             state.filter = el.dataset.filter;
             state.page = 1;
+
+            document.getElementById("dashboard-container").classList.add("d-none");
+            document.getElementById("articles-container").classList.remove("d-none");
+            document.getElementById("pagination").classList.remove("d-none");
+            document.getElementById("view-nav").querySelector(".nav-link").classList.remove("active");
 
             const titles = { all: "全部文章", unread: "未读文章", starred: "收藏文章" };
             document.getElementById("page-title").innerText = titles[state.filter];
@@ -260,5 +385,11 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.innerHTML = origHtml;
             btn.disabled = false;
         }
+    });
+
+    // 绑定看板切换
+    document.getElementById("nav-dashboard").addEventListener("click", (e) => {
+        e.preventDefault();
+        showDashboardView();
     });
 });
