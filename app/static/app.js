@@ -246,7 +246,7 @@ async function fetchAndRenderDashboard() {
 function renderPieChart(perFeed) {
     const ctx = document.getElementById("pieChart").getContext("2d");
 
-    if (pieChartInstance) pieChartInstance.destory();
+    if (pieChartInstance) pieChartInstance.destroy();
 
     // 标签和数据
     const labels = perFeed.map(x => x.feed_title || "未知源");
@@ -281,7 +281,7 @@ function renderPieChart(perFeed) {
 
 function renderBarChart(stats) {
     const ctx = document.getElementById("barChart").getContext("2d");
-    if (barChartInstance) barChartInstance.destory();
+    if (barChartInstance) barChartInstance.destroy();
 
     const unread = stats.unread;
     const read = stats.total - stats.unread;
@@ -312,11 +312,31 @@ function renderBarChart(stats) {
     });
 }
 
+async function fetchSyncStatus() {
+    try{
+        const res = await fetch("/feeds/scheduler/status");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const badge = document.getElementById("sync-status");
+        if (data.last_fetched_at) {
+            const timeStr = formatDate(data.last_fetched_at);
+            badge.innerHTML = `<i class="bi bi-check-circle text-success"></i> 上次同步：${timeStr}`;
+        } else {
+            badge.innerHTML = `<i class="bi bi-exclamation-circle text-warning"></i> 尚未同步过`;
+        }
+    } catch (err) {
+        console.error("获取同步状态失败", err);
+    }
+}
+
 // 初始化与事件绑定
 
 document.addEventListener("DOMContentLoaded", () => {
     // 初始加载
     fetchArticles();
+    // 同步状态
+    fetchSyncStatus();
 
     // 绑定侧边栏筛选点击
     document.querySelectorAll("#filter-nav .nav-link").forEach(el => {
@@ -357,6 +377,8 @@ document.addEventListener("DOMContentLoaded", () => {
         try{
             await fetch("/feeds/scheduler/run-now", { method: "POST" });
             alert("后台抓取任务已触发，稍等几秒后刷新页面看看！");
+            // 延迟几秒后更新状态条
+            setTimeout(fetchSyncStatus, 3000);
         } catch (err) {
             alert("触发失败");
         } finally {

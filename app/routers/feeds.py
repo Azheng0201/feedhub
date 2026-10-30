@@ -42,6 +42,29 @@ class FetchAllResult(BaseModel):
     results: list[FeedFetchResult]
 
 
+@router.get("/scheduler/status", tags=["scheduler"])
+def get_scheduler_status():
+    """获取调度器状态和上次抓取时间。"""
+    job = scheduler.get_job("fetch_all_feeds")
+    from app.db import SessionLocal
+    from sqlalchemy import func
+
+    db = SessionLocal()
+    try:
+        last_fetch = db.execute(
+            select(func.max(Feed.last_fetched_at))
+        ).scalar_one_or_none()
+    finally:
+        db.close()
+
+    next_run = job.next_run_time if job else None
+    return {
+        "last_fetched_at": last_fetch,
+        "next_run_at": next_run,
+        "status": "running" if scheduler.running else "stopped"
+    }
+
+
 @router.post("/fetch-all", response_model=FetchAllResult)
 async def fetch_all(db: Session = Depends(get_db)):
     """

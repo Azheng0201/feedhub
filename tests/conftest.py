@@ -48,21 +48,23 @@ def db_session(monkeypatch):
 
 
 @pytest.fixture
-def client(db_session):
+def client(db_session, monkeypatch):
     """
     FastAPI TestClient, 所有请求用测试 session。
     """
     from app.db import get_db
     from app.main import app
+    import app.services.scheduler as sched_module
+
+    # 1. Mock 掉调度器的启停，防止在测试中真的起后台任务
+    monkeypatch.setattr(sched_module, "start_scheduler", lambda: None)
+    monkeypatch.setattr(sched_module, "stop_scheduler", lambda: None)
 
     def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
+        yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    with TestClient(app, raise_server_exceptions=False) as c:
         yield c
     app.dependency_overrides.clear()
 
