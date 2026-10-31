@@ -1,0 +1,12 @@
+services:
+  web:
+    build: .
+    container_name: feedhub
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # 把容器里的 /app/data 映射到本地的 ./data
+      - ./data:/app/data
+    restart: unless-stopped
