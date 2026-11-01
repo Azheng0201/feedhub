@@ -20,7 +20,6 @@ class FeedCreate(FeedBase):
     """Post /feeds 的请求体。"""
 
 
-
 class FeedUpdate(BaseModel):
     """Patch /feeds/{id} 的请求体。所有字段可选。"""
 

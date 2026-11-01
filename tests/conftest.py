@@ -29,7 +29,7 @@ def db_session(monkeypatch):
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    TestingSessionLocal = sessionmaker(
+    testing_session_local = sessionmaker(
         bind=test_engine,
         autoflush=False,
         autocommit=False,
@@ -37,13 +37,13 @@ def db_session(monkeypatch):
 
     # 用测试 session 替换模块里的 engine / SessionLocal
     monkeypatch.setattr(db_module, "engine", test_engine)
-    monkeypatch.setattr(db_module, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(db_module, "SessionLocal", testing_session_local)
 
     # 建表
 
     Base.metadata.create_all(bind=test_engine)
 
-    session = TestingSessionLocal()
+    session = testing_session_local()
     yield session
     session.close()
     Base.metadata.drop_all(bind=test_engine)

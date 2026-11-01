@@ -23,3 +23,10 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
 ]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "SIM"]
+ignore = [
+    "E501", # 行太长
+    "B008", # 忽略 FastAPI Depends 带来的警告
+]

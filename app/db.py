@@ -28,7 +28,6 @@ class Base(DeclarativeBase):
     """所有 ORM 模型的基类"""
 
 
-
 def get_db():
     """FastAPI 依赖注入用: 每个请求一个 session, 用完自动关。"""
     db = SessionLocal()

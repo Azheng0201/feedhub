@@ -99,9 +99,9 @@ def _fetch_raw_sync(url: str) -> bytes:
             resp.raise_for_status()
             return resp.content
     except httpx.HTTPStatusError as e:
-        raise FetchError(f"HTTP {e.response.status_code}: {url}")
+        raise FetchError(f"HTTP {e.response.status_code}: {url}") from None
     except httpx.RequestError as e:
-        raise FetchError(f"网络错误：{e}")
+        raise FetchError(f"网络错误：{e}") from None
 
 
 def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
@@ -166,7 +166,7 @@ def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise FetchError("入库时遇到并发冲突，请重试")
+        raise FetchError("入库时遇到并发冲突，请重试") from None
 
     return {
         "fetched": len(parsed.entries),
@@ -191,9 +191,9 @@ async def _fetch_raw_async(client: httpx.AsyncClient, url: str) -> bytes:
         resp.raise_for_status()
         return resp.content
     except httpx.HTTPStatusError as e:
-        raise FetchError(f"HTTP {e.response.status_code}: {url}")
+        raise FetchError(f"HTTP {e.response.status_code}: {url}") from None
     except httpx.RequestError as e:
-        raise FetchError(f"网络错误：{e}")
+        raise FetchError(f"网络错误：{e}") from None
 
 
 async def _fetch_all_raw(feeds: list[Feed]) -> list[bytes]:
@@ -219,7 +219,7 @@ async def fetch_feeds_concurrent(db: Session, feeds: list[Feed]) -> list[dict]:
     raw_results = await _fetch_all_raw(feeds)
 
     output: list[dict] = []
-    for feed, result in zip(feeds, raw_results):
+    for feed, result in zip(feeds, raw_results, strict=False):
         if isinstance(result, BaseException):
             err = str(result) if not isinstance(result, FetchError) else str(result)
             output.append(

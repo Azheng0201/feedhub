@@ -49,10 +49,10 @@ def get_stats(db: Session = Depends(get_db)):
     """
     total = db.execute(select(func.count(Article.id))).scalar_one()
     unread = db.execute(
-        select(func.count(Article.id)).where(Article.is_read == False)
+        select(func.count(Article.id)).where(Article.is_read.is_(False))
     ).scalar_one()
     starred = db.execute(
-        select(func.count(Article.id)).where(Article.is_starred == True)
+        select(func.count(Article.id)).where(Article.is_starred.is_(True))
     ).scalar_one()
     feeds_count = db.execute(select(func.count(Feed.id))).scalar_one()
 
@@ -91,8 +91,8 @@ def clean_old_articles(
 
     stmt = select(Article).where(
         Article.published_at < cutoff_date,
-        Article.is_read == True,
-        Article.is_starred == False,
+        Article.is_read.is_(True),
+        Article.is_starred.is_(False),
     )
     articles_to_delete = db.execute(stmt).scalars().all()
     count = len(articles_to_delete)
@@ -245,7 +245,7 @@ def mark_all_read(
     """
     一键全部已读。返回受影响的行数。
     """
-    stmt = select(Article).where(Article.is_read == False)
+    stmt = select(Article).where(Article.is_read.is_(False))
     if feed_id is not None:
         stmt = stmt.where(Article.feed_id == feed_id)
 

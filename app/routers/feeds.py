@@ -112,7 +112,7 @@ def fetch_one_feed(feed_id: int, db: Session = Depends(get_db)):
         stats = fetch_feed(db, feed)
     except FetchError as e:
         # 抓取失败用 502 Bad GateWay, 表示"上游有问题"
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from None
 
     return {
         "feed_id": feed_id,
@@ -125,7 +125,7 @@ def _get_feed_or_404(db: Session, feed_id: int) -> Feed:
     """获取 Feed 或抛出 404"""
     feed = db.get(Feed, feed_id)
     if feed is None:
-        raise HTTPException(status_code=404, detail=f"Feed {feed_id} 不存在")
+        raise HTTPException(status_code=404, detail=f"Feed {feed_id} 不存在") from None
     return feed
 
 
@@ -140,7 +140,7 @@ def create_feed(payload: FeedCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(
             status_code=409, detail=f"URL 已存在(feed_id={existing.id}) "
-        )
+        ) from None
 
     feed = Feed(
         url=url_str,
@@ -153,7 +153,7 @@ def create_feed(payload: FeedCreate, db: Session = Depends(get_db)):
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="URL 已存在")
+        raise HTTPException(status_code=409, detail="URL 已存在") from None
     db.refresh(feed)
     return feed
 
