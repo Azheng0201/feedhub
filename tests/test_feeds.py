@@ -2,10 +2,13 @@
 
 
 def test_create_feed(client):
-    r = client.post("/feeds", json={
-        "url": "https://example.com/rss",
-        "title": "示例源",
-    })
+    r = client.post(
+        "/feeds",
+        json={
+            "url": "https://example.com/rss",
+            "title": "示例源",
+        },
+    )
     if r.status_code == 422:
         print("\n[422 详情]：", r.json())
     assert r.status_code == 201
@@ -38,7 +41,7 @@ def test_list_feeds_order(client, make_feed):
     make_feed(url="https://b.com/rss", title="B")
     r = client.get("/feeds")
     titles = [f["title"] for f in r.json()]
-    assert titles == ["B", "A"] # 倒序
+    assert titles == ["B", "A"]  # 倒序
 
 
 def test_get_feed(client, make_feed):

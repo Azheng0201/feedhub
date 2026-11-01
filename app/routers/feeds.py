@@ -1,21 +1,23 @@
 """Feed 的 CRUD 路由。"""
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
 from app.db import get_db
 from app.models import Feed
 from app.schemas import FeedCreate, FeedRead, FeedUpdate
 from app.services.fetcher import FetchError, fetch_feed, fetch_feeds_concurrent
-from app.services.scheduler import scheduler, scheduled_fetch_all
+from app.services.scheduler import scheduled_fetch_all, scheduler
 
 router = APIRouter(prefix="/feeds", tags=["feeds"])
 
 
 class FetchResult(BaseModel):
     """抓取结果。"""
+
     feed_id: int
     fetched: int
     created: int
@@ -25,6 +27,7 @@ class FetchResult(BaseModel):
 
 class FeedFetchResult(BaseModel):
     """单个源的抓取结果。"""
+
     feed_id: int
     ok: bool
     fetched: int
@@ -35,6 +38,7 @@ class FeedFetchResult(BaseModel):
 
 class FetchAllResult(BaseModel):
     """批量抓取汇总。"""
+
     total: int
     successed: int
     failed: int
@@ -46,8 +50,9 @@ class FetchAllResult(BaseModel):
 def get_scheduler_status():
     """获取调度器状态和上次抓取时间。"""
     job = scheduler.get_job("fetch_all_feeds")
-    from app.db import SessionLocal
     from sqlalchemy import func
+
+    from app.db import SessionLocal
 
     db = SessionLocal()
     try:
@@ -61,7 +66,7 @@ def get_scheduler_status():
     return {
         "last_fetched_at": last_fetch,
         "next_run_at": next_run,
-        "status": "running" if scheduler.running else "stopped"
+        "status": "running" if scheduler.running else "stopped",
     }
 
 
@@ -71,13 +76,17 @@ async def fetch_all(db: Session = Depends(get_db)):
     并发抓取所有源。
     """
     import time
+
     t0 = time.perf_counter()
 
     feeds = db.execute(select(Feed)).scalars().all()
     if not feeds:
         return {
-            "total": 0, "successed": 0, "failed": 0,
-            "elapsed_ms": 0, "results": [],
+            "total": 0,
+            "successed": 0,
+            "failed": 0,
+            "elapsed_ms": 0,
+            "results": [],
         }
 
     results = await fetch_feeds_concurrent(db, feeds)
@@ -107,9 +116,10 @@ def fetch_one_feed(feed_id: int, db: Session = Depends(get_db)):
 
     return {
         "feed_id": feed_id,
-        "message": f"✅ 抓取完成",
+        "message": "✅ 抓取完成",
         **stats,
     }
+
 
 def _get_feed_or_404(db: Session, feed_id: int) -> Feed:
     """获取 Feed 或抛出 404"""
@@ -126,11 +136,11 @@ def create_feed(payload: FeedCreate, db: Session = Depends(get_db)):
     url_str = str(payload.url)
 
     # 先检查一遍更友好地报 409（DB 层也有唯一约束兜底）
-    existing = db.execute(
-        select(Feed).where(Feed.url == url_str)
-    ).scalar_one_or_none()
+    existing = db.execute(select(Feed).where(Feed.url == url_str)).scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=409, detail=f"URL 已存在(feed_id={existing.id}) ")
+        raise HTTPException(
+            status_code=409, detail=f"URL 已存在(feed_id={existing.id}) "
+        )
 
     feed = Feed(
         url=url_str,
@@ -151,9 +161,11 @@ def create_feed(payload: FeedCreate, db: Session = Depends(get_db)):
 @router.get("", response_model=list[FeedRead])
 def list_feeds(db: Session = Depends(get_db)):
     """获取所有订阅源。按创建时间倒序。"""
-    feeds = db.execute(
-        select(Feed).order_by(Feed.created_at.desc(), Feed.id.desc())
-    ).scalars().all()
+    feeds = (
+        db.execute(select(Feed).order_by(Feed.created_at.desc(), Feed.id.desc()))
+        .scalars()
+        .all()
+    )
     return feeds
 
 
@@ -185,7 +197,6 @@ def delete_feed(feed_id: int, db: Session = Depends(get_db)):
     feed = _get_feed_or_404(db, feed_id)
     db.delete(feed)
     db.commit()
-    return None
 
 
 @router.get("/scheduler/jobs", tags=["scheduler"])
@@ -207,5 +218,6 @@ async def trigger_fetch_now():
     """立即在后台触发一次全量抓取。"""
     # 用 create_task 放到后台跑，不阻塞当前请求
     import asyncio
+
     asyncio.create_task(scheduled_fetch_all())
     return {"status": "started", "message": "后台抓取任务已触发，请查看控制台日志"}

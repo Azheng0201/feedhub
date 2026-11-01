@@ -1,4 +1,5 @@
 """数据库连接与会话管理"""
+
 import os
 from pathlib import Path
 
@@ -10,7 +11,10 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'feedhub.db'}",)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"sqlite:///{BASE_DIR / 'data' / 'feedhub.db'}",
+)
 
 # SQLite 需要 check_same_thread=False 才能在多线程环境下使用
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
@@ -22,7 +26,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 class Base(DeclarativeBase):
     """所有 ORM 模型的基类"""
-    pass
+
 
 
 def get_db():

@@ -1,5 +1,5 @@
 """Pytest 公共 fixture：每个测试独立的数据库 + TestClient。"""
-import os
+
 import sys
 from pathlib import Path
 
@@ -30,7 +30,9 @@ def db_session(monkeypatch):
         poolclass=StaticPool,
     )
     TestingSessionLocal = sessionmaker(
-        bind=test_engine, autoflush=False, autocommit=False,
+        bind=test_engine,
+        autoflush=False,
+        autocommit=False,
     )
 
     # 用测试 session 替换模块里的 engine / SessionLocal
@@ -38,7 +40,7 @@ def db_session(monkeypatch):
     monkeypatch.setattr(db_module, "SessionLocal", TestingSessionLocal)
 
     # 建表
-    import app.models
+
     Base.metadata.create_all(bind=test_engine)
 
     session = TestingSessionLocal()
@@ -52,9 +54,9 @@ def client(db_session, monkeypatch):
     """
     FastAPI TestClient, 所有请求用测试 session。
     """
+    import app.services.scheduler as sched_module
     from app.db import get_db
     from app.main import app
-    import app.services.scheduler as sched_module
 
     # 1. Mock 掉调度器的启停，防止在测试中真的起后台任务
     monkeypatch.setattr(sched_module, "start_scheduler", lambda: None)
@@ -71,6 +73,7 @@ def client(db_session, monkeypatch):
 
 # ---------- 数据工厂 ----------
 
+
 @pytest.fixture
 def make_feed(db_session):
     """快速创建一个 Feed，返回 ORM 对象。"""
@@ -82,6 +85,7 @@ def make_feed(db_session):
         db_session.commit()
         db_session.refresh(f)
         return f
+
     return _make
 
 
@@ -97,4 +101,5 @@ def make_article(db_session):
         db_session.commit()
         db_session.refresh(a)
         return a
+
     return _make

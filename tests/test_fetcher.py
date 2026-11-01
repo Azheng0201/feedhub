@@ -1,4 +1,5 @@
 """fetcher 测试。"""
+
 import httpx
 import pytest
 import respx
@@ -26,9 +27,10 @@ SAMPLE_RSS = """<?xml version="1.0" encoding="UTF-8"?>
         </item>
     </channel>
 </rss>
-""".encode("utf-8")
+""".encode()
 
 # ---------- 正常路径 ----------
+
 
 @respx.mock
 def test_fetch_feed_success(db_session, make_feed):
@@ -66,11 +68,10 @@ def test_fetch_feed_dedup(db_session, make_feed):
 
 # ---------- 错误路径 ----------
 
+
 @respx.mock
 def test_fetch_feed_http_404(db_session, make_feed):
-    respx.get("https://example.com/rss").mock(
-        return_value=httpx.Response(404)
-    )
+    respx.get("https://example.com/rss").mock(return_value=httpx.Response(404))
     f = make_feed(url="https://example.com/rss")
 
     with pytest.raises(FetchError, match="HTTP 404"):
@@ -114,6 +115,7 @@ def test_fetch_feed_empty_rss(db_session, make_feed):
 
 # ---------- 脏数据处理 ----------
 
+
 @respx.mock
 def test_fetch_feed_strips_html(db_session, make_feed):
     rss = """<?xml version="1.0"?>
@@ -132,7 +134,9 @@ def test_fetch_feed_strips_html(db_session, make_feed):
     fetch_feed(db_session, f)
 
     from sqlalchemy import select
+
     from app.models import Article
+
     a = db_session.execute(select(Article)).scalar_one()
     assert "<" not in a.summary
     assert "粗体" in a.summary
@@ -140,15 +144,14 @@ def test_fetch_feed_strips_html(db_session, make_feed):
 
 # ---------- 批量并发 ----------
 
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_fetch_feeds_concurrent_partial_failure(db_session, make_feed):
     respx.get("https://good1.com/rss").mock(
         return_value=httpx.Response(200, content=SAMPLE_RSS)
     )
-    respx.get("https://bad.com/rss").mock(
-        return_value=httpx.Response(500)
-    )
+    respx.get("https://bad.com/rss").mock(return_value=httpx.Response(500))
     respx.get("https://good2.com/rss").mock(
         return_value=httpx.Response(200, content=SAMPLE_RSS)
     )
@@ -158,6 +161,7 @@ async def test_fetch_feeds_concurrent_partial_failure(db_session, make_feed):
     f3 = make_feed(url="https://good2.com/rss", title="G2")
 
     from app.services.fetcher import fetch_feeds_concurrent
+
     results = await fetch_feeds_concurrent(db_session, [f1, f2, f3])
 
     assert len(results) == 3

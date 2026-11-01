@@ -1,4 +1,5 @@
 """后台定时任务调度器。"""
+
 import asyncio
 import logging
 
@@ -17,6 +18,7 @@ scheduler = AsyncIOScheduler()
 
 # 防并发锁：防止定时任务和手动触发的 API 同时抓取，导致 SQLite 锁死
 _fetch_lock = asyncio.Lock()
+
 
 async def scheduled_fetch_all():
     """
@@ -39,7 +41,9 @@ async def scheduled_fetch_all():
 
             success = sum(1 for r in results if r["ok"])
             created = sum(r["created"] for r in results)
-            logger.info(f"✅ 后台抓取完成：{success}/{len(results)} 个源成功，新增 {created} 篇文章。")
+            logger.info(
+                f"✅ 后台抓取完成：{success}/{len(results)} 个源成功，新增 {created} 篇文章。"
+            )
 
         except Exception as e:
             logger.error(f"❌ 后台抓取异常：{e}", exc_info=True)
@@ -55,7 +59,7 @@ def start_scheduler():
         trigger=IntervalTrigger(minutes=30),
         id="fetch_all_feeds",
         name="定时全量抓取",
-        replace_existing=True, # 防止热重载时重复添加
+        replace_existing=True,  # 防止热重载时重复添加
     )
     scheduler.start()
     logger.info("⏰ 调度器已启动，任务：每 30 分钟抓取一次")

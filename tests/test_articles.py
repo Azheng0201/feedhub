@@ -1,4 +1,4 @@
-""" Article 接口测试。"""
+"""Article 接口测试。"""
 
 
 def test_list_articles_empty(client):
@@ -91,6 +91,7 @@ def test_patch_article_empty_body(client, make_feed, make_article):
     r = client.patch(f"/articles/{a.id}", json={})
     assert r.status_code == 400
 
+
 def test_patch_article_not_found(client):
     r = client.patch("/articles/99999", json={"is_read": True})
     assert r.status_code == 404
@@ -119,7 +120,7 @@ def test_mark_all_read_for_feed(client, make_feed, make_article):
 
 
 def test_list_articles_includes_feed_title(client, make_feed, make_article):
-    f = make_feed(title = "测试源标题")
+    f = make_feed(title="测试源标题")
     make_article(f, title="文章A", link="http://ex.com/a")
 
     r = client.get("/articles").json()
@@ -128,7 +129,7 @@ def test_list_articles_includes_feed_title(client, make_feed, make_article):
 
 def test_get_stats(client, make_feed, make_article):
     f = make_feed()
-    make_article(f, title="文章1", is_read=False) 
+    make_article(f, title="文章1", is_read=False)
     make_article(f, title="文章2", is_read=True, is_starred=True)
     r = client.get("/articles/stats").json()
     assert r["total"] == 2
@@ -139,7 +140,8 @@ def test_get_stats(client, make_feed, make_article):
 
 
 def test_clean_old_articles(client, make_feed, make_article, db_session):
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
+
     f = make_feed()
 
     old_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=40)
@@ -147,7 +149,9 @@ def test_clean_old_articles(client, make_feed, make_article, db_session):
     old_a.published_at = old_date
     db_session.commit()
 
-    star_a = make_article(f, title="收藏旧文章", link="https://ex.com/star", is_read=True, is_starred=True)
+    star_a = make_article(
+        f, title="收藏旧文章", link="https://ex.com/star", is_read=True, is_starred=True
+    )
     star_a.published_at = old_date
     db_session.commit()
 

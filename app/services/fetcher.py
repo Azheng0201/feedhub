@@ -1,4 +1,5 @@
 """RSS 抓取服务。支持单源和批量。"""
+
 import asyncio
 import re
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ class FetchError(Exception):
 
 
 # ---------- 工具函数 ----------
+
 
 def _struct_to_dt(s) -> datetime | None:
     """feedparser 的 published_parsed (struct_time) → datetime (UTC)。"""
@@ -60,7 +62,11 @@ def _pick_content(entry) -> str:
     content = getattr(entry, "content", None)
     if content and isinstance(content, list):
         # Atom 的 content 是 list[dict]
-        return content[0].get("value", "") if isinstance(content[0], dict) else str(content[0])
+        return (
+            content[0].get("value", "")
+            if isinstance(content[0], dict)
+            else str(content[0])
+        )
     return getattr(entry, "summary", "") or ""
 
 
@@ -74,6 +80,7 @@ def _pick_published(entry) -> datetime | None:
 
 
 # ---------- 同步：单源抓取 ----------
+
 
 def _http_client() -> httpx.Client:
     """同步 httpx 客户端。"""
@@ -115,9 +122,11 @@ def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
             if links and isinstance(links, list) and isinstance(links[0], dict):
                 site_url = links[0].get("href", "")
         feed.site_url = site_url or feed.site_url
-        desc = (getattr(parsed.feed, "subtitle", "")
-                or getattr(parsed.feed, "description", "")
-                or feed.description)
+        desc = (
+            getattr(parsed.feed, "subtitle", "")
+            or getattr(parsed.feed, "description", "")
+            or feed.description
+        )
         feed.description = _strip_html(desc, limit=500)
 
     created = 0
@@ -138,15 +147,17 @@ def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
             skipped += 1
             continue
 
-        db.add(Article(
-            feed_id=feed.id,
-            title=title[:512],
-            link=link[:1024],
-            summary=_strip_html(getattr(entry, "summary", "") or "", limit=2000),
-            content=_pick_content(entry)[:50000],
-            author=(getattr(entry, "author", "") or "")[:128],
-            published_at=_pick_published(entry),
-        ))
+        db.add(
+            Article(
+                feed_id=feed.id,
+                title=title[:512],
+                link=link[:1024],
+                summary=_strip_html(getattr(entry, "summary", "") or "", limit=2000),
+                content=_pick_content(entry)[:50000],
+                author=(getattr(entry, "author", "") or "")[:128],
+                published_at=_pick_published(entry),
+            )
+        )
         created += 1
 
     feed.last_fetched_at = datetime.now(timezone.utc)
@@ -164,7 +175,6 @@ def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
     }
 
 
-
 def fetch_feed(db: Session, feed: Feed) -> dict:
     """单源同步抓取。"""
     raw = _fetch_raw_sync(feed.url)
@@ -172,6 +182,7 @@ def fetch_feed(db: Session, feed: Feed) -> dict:
 
 
 # ---------- 异步：批量并发抓 HTTP ----------
+
 
 async def _fetch_raw_async(client: httpx.AsyncClient, url: str) -> bytes:
     """异步抓一个 URL, 返回 bytes。"""
@@ -211,24 +222,38 @@ async def fetch_feeds_concurrent(db: Session, feeds: list[Feed]) -> list[dict]:
     for feed, result in zip(feeds, raw_results):
         if isinstance(result, BaseException):
             err = str(result) if not isinstance(result, FetchError) else str(result)
-            output.append({
-                "feed_id": feed.id, "ok": False,
-                "fetched": 0, "created": 0, "skipped": 0,
-                "error": err,
-            })
+            output.append(
+                {
+                    "feed_id": feed.id,
+                    "ok": False,
+                    "fetched": 0,
+                    "created": 0,
+                    "skipped": 0,
+                    "error": err,
+                }
+            )
             continue
 
         try:
             stats = _parse_and_store(db, feed, result)
-            output.append({
-                "feed_id": feed.id, "ok": True,
-                "error": None, **stats,
-            })
+            output.append(
+                {
+                    "feed_id": feed.id,
+                    "ok": True,
+                    "error": None,
+                    **stats,
+                }
+            )
         except FetchError as e:
-            output.append({
-                "feed_id": feed.id, "ok": False,
-                "fetched": 0, "created": 0, "skipped": 0,
-                "error": str(e),
-            })
+            output.append(
+                {
+                    "feed_id": feed.id,
+                    "ok": False,
+                    "fetched": 0,
+                    "created": 0,
+                    "skipped": 0,
+                    "error": str(e),
+                }
+            )
 
     return output
