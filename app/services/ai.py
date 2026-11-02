@@ -1,4 +1,5 @@
 """大模型服务封装。兼容 OpenAI 接口格式。"""
+
 import logging
 import os
 
@@ -20,6 +21,7 @@ SYSTEM_PROMPT = """你是一个专业的新闻摘要助手。请用简练的3句
 2. 语言精炼，突出核心观点。
 """
 
+
 async def generate_summary(text: str) -> str:
     """调用大模型生成摘要。"""
     if not client:
@@ -34,7 +36,7 @@ async def generate_summary(text: str) -> str:
             model=MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": text}
+                {"role": "user", "content": text},
             ],
             temperature=0.3,
             max_tokens=200,

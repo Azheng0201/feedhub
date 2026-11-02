@@ -1,4 +1,5 @@
 """网页正文提取服务。"""
+
 import logging
 
 import httpx
@@ -8,8 +9,10 @@ logger = logging.getLogger(__name__)
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+
 class ExtractError(Exception):
     """提取失败。"""
+
     pass
 
 
@@ -29,10 +32,10 @@ async def extract_full_text(url: str) -> str:
         # 2. 使用 trafilatura 提取正文
         extracted = trafilatura.extract(
             html,
-            include_links=True,      # 保留正文中的超链接
-            include_images=True,     # 保留图片
-            include_formatting=True, # 保留格式
-            favor_recall=True
+            include_links=True,  # 保留正文中的超链接
+            include_images=True,  # 保留图片
+            include_formatting=True,  # 保留格式
+            favor_recall=True,
         )
 
         if not extracted:
