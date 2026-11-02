@@ -181,7 +181,7 @@ async def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
         summaries = await asyncio.gather(*tasks)
 
         # 将 AI 摘要写回数据库
-        for a, ai_sum in zip(new_articles, summaries):
+        for a, ai_sum in zip(new_articles, summaries, strict=False):
             if ai_sum:
                 a.ai_summary = ai_sum
         db.commit()

@@ -16,6 +16,7 @@ from app.schemas import (
     ArticleUpdate,
     PageMeta,
 )
+from app.services.extractor import ExtractError, extract_full_text
 
 
 class StatsResponse(BaseModel):
@@ -40,6 +41,24 @@ def _get_article_or_404(db: Session, article_id: int) -> Article:
     if article is None:
         raise HTTPException(status_code=404, detail=f"Article {article_id} 不存在")
     return article
+
+
+@router.post("/{article_id}/extract", response_model=ArticleRead)
+async def extract_article_content(article_id: int, db: Session = Depends(get_db)):
+    """针对只提供摘要的 RSS，去原网页抓取完整正文。"""
+    article = _get_article_or_404(db, article_id)
+
+    try:
+        full_text = await extract_full_text(article.link)
+
+        article.content = full_text[:100000]
+
+        db.commit()
+        db.refresh(article)
+        return article
+
+    except ExtractError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
 
 @router.get("/stats", response_model=StatsResponse)

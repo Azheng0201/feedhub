@@ -166,7 +166,22 @@ async function openArticle(id, event) {
                 </div>
             `;
         }
-        contentHtml += data.content || data.summary || "<p class='text-muted'>暂无正文</p>";
+        const isProbablySummary = !data.content || data.content.length < 500;
+
+        if (isProbablySummary && data.link) {
+            contentHtml += `
+                <div id="extract-btn-container" class="text-center my-4 py-4 bg-light rounded border">
+                    <p class="text-muted mb-3">当前 RSS 源只提供了摘要。你可以尝试从原网页抓取完整正文。</p>
+                    <button class="btn btn-primary" onclick="extractFullText(${data.id})">
+                        <i class="bi bi-box-arrow-in-down"></i> 抓取完整正文
+                    </button>
+                </div>
+            `;
+            contentHtml += `<div class="text-muted mt-3" style="font-size: 0.9rem;">${data.summary || ""}</div>`;
+        } else {
+            contentHtml += data.content || "<p class='text-muted'>暂无正文</p>";
+        }
+        
         bodyEl.innerHTML = contentHtml;
 
         // 4. 如果未读，自动标记为已读并刷新列表
@@ -338,6 +353,47 @@ async function fetchSyncStatus() {
         }
     } catch (err) {
         console.error("获取同步状态失败", err);
+    }
+}
+
+
+async function extractFullText(id) {
+    const btnContainer = document.getElementById("extract-btn-container");
+    const bodyEl = document.getElementById("modal-body");
+
+    btnContainer.innerHTML = `
+        <div class="spinner-border text-primary mb-2" role="status"></div>
+        <p class="text-muted mb-0">正在分析网页结构并提取正文，请稍后...</p>
+    `;
+
+    try {
+        const res = await fetch(`${API_BASE}/${id}/extract`, { method: "POST" });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || "抓取失败");
+        }
+
+        const data = await res.json();
+
+        let newHtml = "";
+        if (data.ai_summary) {
+            newHtml += `
+                <div class="alert alert-info border-info mb-4" style="background-color: #f0f8ff;">
+                    <h6 class="alert-heading fw-bold"><i class="bi bi-stars"></i> AI 智能摘要</h6>
+                    <p class="mb-0">${data.ai_summary}</p>
+                </div>
+            `;
+        }
+        newHtml += data.content;
+        bodyEl.innerHTML = newHtml;
+        fetchArticles();
+    } catch (err) {
+        btnContainer.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                <i class="bi bi-x-circle"></i> ${err.message}
+                <button class="btn btn-sm btn-outline-danger ms-3" onclick="extractFullText(${id})">重试</button>
+            </div>   
+        `;
     }
 }
 

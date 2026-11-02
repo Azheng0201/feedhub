@@ -1,8 +1,9 @@
 """大模型服务封装。兼容 OpenAI 接口格式。"""
-import os
 import logging
-from openai import AsyncOpenAI
+import os
+
 from dotenv import load_dotenv
+from openai import AsyncOpenAI
 
 load_dotenv()
 
