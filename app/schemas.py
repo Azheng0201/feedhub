@@ -68,6 +68,7 @@ class ArticleRead(ArticleBase):
     title: str
     link: str
     summary: str
+    ai_summary: str = ""
     author: str
     published_at: datetime | None = None
     fetched_at: datetime

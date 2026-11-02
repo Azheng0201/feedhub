@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import Article, Feed
+from app.services.ai import generate_summary
 
 # 抓取超时（秒）
 FETCH_TIMEOUT = 15
@@ -104,7 +105,7 @@ def _fetch_raw_sync(url: str) -> bytes:
         raise FetchError(f"网络错误：{e}") from None
 
 
-def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
+async def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
     """
     解析 RSS bytes，入库去重。
     返回 {"fetched": N, "created": N, "skipped": N}
@@ -129,8 +130,10 @@ def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
         )
         feed.description = _strip_html(desc, limit=500)
 
+    new_articles = []
     created = 0
     skipped = 0
+
     for entry in parsed.entries:
         link = _pick_link(entry)
         title = (getattr(entry, "title", "") or "").strip()
@@ -147,26 +150,41 @@ def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
             skipped += 1
             continue
 
-        db.add(
-            Article(
-                feed_id=feed.id,
-                title=title[:512],
-                link=link[:1024],
-                summary=_strip_html(getattr(entry, "summary", "") or "", limit=2000),
-                content=_pick_content(entry)[:50000],
-                author=(getattr(entry, "author", "") or "")[:128],
-                published_at=_pick_published(entry),
-            )
+        article = Article(
+            feed_id=feed.id,
+            title=title[:512],
+            link=link[:1024],
+            summary=_strip_html(getattr(entry, "summary", "") or "", limit=2000),
+            content=_pick_content(entry)[:50000],
+            author=(getattr(entry, "author", "") or "")[:128],
+            published_at=_pick_published(entry),
         )
+        db.add(article)
+        new_articles.append(article)
         created += 1
 
-    feed.last_fetched_at = datetime.now(timezone.utc)
-
+    feed.last_fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
         raise FetchError("入库时遇到并发冲突，请重试") from None
+
+    # 并发请求 AI 摘要
+    if new_articles:
+        tasks = []
+        # 优先用正文，没有正文就用普通摘要
+        for a in new_articles:
+            text_to_summarize = a.content or a.summary or a.title
+            tasks.append(generate_summary(text_to_summarize))
+
+        summaries = await asyncio.gather(*tasks)
+
+        # 将 AI 摘要写回数据库
+        for a, ai_sum in zip(new_articles, summaries):
+            if ai_sum:
+                a.ai_summary = ai_sum
+        db.commit()
 
     return {
         "fetched": len(parsed.entries),
@@ -235,7 +253,7 @@ async def fetch_feeds_concurrent(db: Session, feeds: list[Feed]) -> list[dict]:
             continue
 
         try:
-            stats = _parse_and_store(db, feed, result)
+            stats = await _parse_and_store(db, feed, result)
             output.append(
                 {
                     "feed_id": feed.id,

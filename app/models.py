@@ -42,6 +42,8 @@ class Article(Base):
     title: Mapped[str] = mapped_column(String(512))
     link: Mapped[str] = mapped_column(String(1024), index=True)
     summary: Mapped[str] = mapped_column(Text, default="")
+    # AI 摘要
+    ai_summary: Mapped[str] = mapped_column(Text, default="")
     content: Mapped[str] = mapped_column(Text, default="")
     author: Mapped[str] = mapped_column(String(128), default="")
     # 发布时间

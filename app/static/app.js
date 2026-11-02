@@ -156,7 +156,18 @@ async function openArticle(id, event) {
         linkEl.href = data.link;
 
         // 3. 渲染正文
-        bodyEl.innerHTML = data.content || data.summary || "<p class='text-muted'>暂无正文</p>";
+        let contentHtml = ""
+
+        if (data.ai_summary) {
+            contentHtml += `
+                <div class="alert alert-info border-info mb-4" style="background-color: #f0f8ff;">
+                    <h6 class="alert-heading fw-bold"><i class="bi bi-stars"></i> AI 智能摘要</h6>
+                    <p class="mb-0">${data.ai_summary}</p>
+                </div>
+            `;
+        }
+        contentHtml += data.content || data.summary || "<p class='text-muted'>暂无正文</p>";
+        bodyEl.innerHTML = contentHtml;
 
         // 4. 如果未读，自动标记为已读并刷新列表
         if(!data.is_read) {
