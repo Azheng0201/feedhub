@@ -33,13 +33,13 @@ SAMPLE_RSS = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 @respx.mock
-def test_fetch_feed_success(db_session, make_feed):
+async def test_fetch_feed_success(db_session, make_feed):
     respx.get("https://example.com/rss").mock(
         return_value=httpx.Response(200, content=SAMPLE_RSS)
     )
     f = make_feed(url="https://example.com/rss", title="旧标题")
 
-    stats = fetch_feed(db_session, f)
+    stats = await fetch_feed(db_session, f)
     assert stats["fetched"] == 2
     assert stats["created"] == 2
     assert stats["skipped"] == 0
@@ -52,14 +52,14 @@ def test_fetch_feed_success(db_session, make_feed):
 
 
 @respx.mock
-def test_fetch_feed_dedup(db_session, make_feed):
+async def test_fetch_feed_dedup(db_session, make_feed):
     respx.get("https://example.com/rss").mock(
         return_value=httpx.Response(200, content=SAMPLE_RSS)
     )
     f = make_feed(url="https://example.com/rss")
 
-    fetch_feed(db_session, f)
-    stats = fetch_feed(db_session, f)
+    await fetch_feed(db_session, f)
+    stats = await fetch_feed(db_session, f)
 
     assert stats["fetched"] == 2
     assert stats["created"] == 0
@@ -70,45 +70,45 @@ def test_fetch_feed_dedup(db_session, make_feed):
 
 
 @respx.mock
-def test_fetch_feed_http_404(db_session, make_feed):
+async def test_fetch_feed_http_404(db_session, make_feed):
     respx.get("https://example.com/rss").mock(return_value=httpx.Response(404))
     f = make_feed(url="https://example.com/rss")
 
     with pytest.raises(FetchError, match="HTTP 404"):
-        fetch_feed(db_session, f)
+        await fetch_feed(db_session, f)
 
 
 @respx.mock
-def test_fetch_feed_network_error(db_session, make_feed):
+async def test_fetch_feed_network_error(db_session, make_feed):
     respx.get("https://example.com/rss").mock(
         side_effect=httpx.ConnectError("connection refused")
     )
     f = make_feed(url="https://example.com/rss")
 
     with pytest.raises(FetchError, match="网络错误"):
-        fetch_feed(db_session, f)
+        await fetch_feed(db_session, f)
 
 
 @respx.mock
-def test_fetch_feed_bad_rss(db_session, make_feed):
+async def test_fetch_feed_bad_rss(db_session, make_feed):
     respx.get("https://example.com/rss").mock(
         return_value=httpx.Response(200, content=b"this is not xml at all")
     )
     f = make_feed(url="https://example.com/rss")
 
     with pytest.raises(FetchError):
-        fetch_feed(db_session, f)
+        await fetch_feed(db_session, f)
 
 
 @respx.mock
-def test_fetch_feed_empty_rss(db_session, make_feed):
+async def test_fetch_feed_empty_rss(db_session, make_feed):
     empty = b'<?xml version="1.0"?><rss version="2.0"><channel><title>X</title></channel></rss>'
     respx.get("https://example.com/rss").mock(
         return_value=httpx.Response(200, content=empty)
     )
     f = make_feed(url="https://example.com/rss")
 
-    stats = fetch_feed(db_session, f)
+    stats = await fetch_feed(db_session, f)
     assert stats["fetched"] == 0
     assert stats["created"] == 0
 
@@ -117,7 +117,7 @@ def test_fetch_feed_empty_rss(db_session, make_feed):
 
 
 @respx.mock
-def test_fetch_feed_strips_html(db_session, make_feed):
+async def test_fetch_feed_strips_html(db_session, make_feed):
     rss = """<?xml version="1.0"?>
     <rss version="2.0"><channel><title>X</title>
         <item>
@@ -131,7 +131,7 @@ def test_fetch_feed_strips_html(db_session, make_feed):
         return_value=httpx.Response(200, content=rss)
     )
     f = make_feed(url="https://example.com/rss")
-    fetch_feed(db_session, f)
+    await fetch_feed(db_session, f)
 
     from sqlalchemy import select
 
