@@ -52,3 +52,19 @@ async def extract_full_text(url: str) -> str:
     except Exception as e:
         logger.error(f"提取异常 {e}")
         raise ExtractError("网页解析失败") from None
+
+
+def html_to_markdown(html_content: str) -> str:
+    """将 HTML 转为 Markdown。"""
+    if not html_content:
+        return ""
+
+    # trafilatura 的 extract 也可以直接处理 HTML 字符串
+    md = trafilatura.extract(
+        html_content,
+        include_links=True,
+        include_images=True,
+        include_formatting=True,
+        output_format="markdown",
+    )
+    return md or " (无正文内容) "

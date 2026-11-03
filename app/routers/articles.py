@@ -1,8 +1,10 @@
 """Article 的浏览与状态管理路由。"""
 
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
@@ -16,7 +18,7 @@ from app.schemas import (
     ArticleUpdate,
     PageMeta,
 )
-from app.services.extractor import ExtractError, extract_full_text
+from app.services.extractor import ExtractError, extract_full_text, html_to_markdown
 
 
 class StatsResponse(BaseModel):
@@ -274,3 +276,47 @@ def mark_all_read(
 
     db.commit()
     return {"updated": len(articles)}
+
+
+@router.get("/{article_id}/export")
+def export_article(article_id: int, db: Session = Depends(get_db)):
+    """导出文章为 Markdown 文件。"""
+    article = _get_article_or_404(db, article_id)
+
+    # 1. 组装 Markdown 内容
+    md_content = f"# {article.title}\n\n"
+    if article.author:
+        md_content += f"**作者**: {article.author}  \n"
+    if article.published_at:
+        md_content += (
+            f"**发布时间**: {article.published_at.strftime('%Y-%m-%d %H:%M')}  \n"
+        )
+    md_content += f"**原文链接**: [{article.link}]({article.link})\n\n"
+
+    md_content += "---\n\n"
+
+    # 2. 将正文 HTML 转为 Markdown
+    # 如果没有正文，就用摘要
+    content_source = article.content or article.summary or ""
+    if "<" in content_source and ">" in content_source:
+        md_content += html_to_markdown(content_source)
+    else:
+        md_content += content_source
+
+    if article.ai_summary:
+        md_content += f"\n\n> **AI 摘要**: {article.ai_summary}"
+
+    # 3. 构造安全的文件名
+    # 移除文件名中的非法字符
+    safe_title = "".join(c for c in article.title if c not in r'\/:*?"<>|')
+    # 防止文件名过长
+    safe_title = safe_title[:50]
+    filename_utf8 = f"{safe_title}.md"
+    # 按照 RFC 5987 对文件名进行 URL 编码，确保中文和特殊字符在浏览器中正确显示
+    disposition = f"attachment; filename*=UTF-8''{quote(filename_utf8)}"
+
+    return Response(
+        content=md_content,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": disposition},
+    )

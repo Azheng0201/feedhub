@@ -140,6 +140,8 @@ async function openArticle(id, event) {
     const bodyEl = document.getElementById("modal-body");
     const metaEl = document.getElementById("modal-meta");
     const linkEl = document.getElementById("modal-link");
+    const exportBtn = document.getElementById("modal-export-btn");
+    exportBtn.href = `${API_BASE}/${id}/export`;
 
     titleEl.innerText = "加载中...";
     bodyEl.innerHTML = `<div class="text-center py-5"><span class="spinner-border"></span></div>`;
