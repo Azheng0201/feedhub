@@ -18,6 +18,7 @@ from app.schemas import (
     ArticleUpdate,
     PageMeta,
 )
+from app.services.cache import clear_pattern, get_cache, set_cache
 from app.services.extractor import ExtractError, extract_full_text, html_to_markdown
 
 
@@ -139,10 +140,18 @@ async def extract_article_content(article_id: int, db: Session = Depends(get_db)
 
 
 @router.get("/stats", response_model=StatsResponse)
-def get_stats(db: Session = Depends(get_db)):
+async def get_stats(db: Session = Depends(get_db)):
     """
-    文章统计聚合。
+    文章统计聚合。带 Redis 缓存，有效期 5 分钟。
     """
+    cache_key = "stats:dashboard"
+
+    # 1. 尝试从缓存读取
+    cache_data = await get_cache(cache_key)
+    if cache_data:
+        return cache_data  # 命中缓存，直接返回
+
+    # 2. 缓存未命中，查询数据库
     total = db.execute(select(func.count(Article.id))).scalar_one()
     unread = db.execute(
         select(func.count(Article.id)).where(Article.is_read.is_(False))
@@ -163,13 +172,17 @@ def get_stats(db: Session = Depends(get_db)):
 
     per_feed = [{"feed_title": row[0], "count": row[1]} for row in per_feed_rows]
 
-    return {
+    result = {
         "total": total,
         "unread": unread,
         "starred": starred,
         "feeds_count": feeds_count,
         "per_feed": per_feed,
     }
+
+    # 3. 写入缓存
+    await set_cache(cache_key, result, expire=300)
+    return result
 
 
 @router.delete("/clean", response_model=CleanResponse)
@@ -303,7 +316,7 @@ def get_article(article_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{article_id}", response_model=ArticleRead)
-def update_article(
+async def update_article(
     article_id: int, payload: ArticleUpdate, db: Session = Depends(get_db)
 ):
     """标记已读/收藏。只改传过来的字段。"""
@@ -326,6 +339,10 @@ def update_article(
             article.read_at = None
 
     db.commit()
+
+    # 清理统计缓存
+    await clear_pattern("stats:*")
+
     db.refresh(article)
     return article
 

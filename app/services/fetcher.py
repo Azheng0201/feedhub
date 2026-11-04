@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Article, Feed
 from app.services.ai import generate_summary
+from app.services.cache import clear_pattern
 
 # 抓取超时（秒）
 FETCH_TIMEOUT = 15
@@ -185,6 +186,10 @@ async def _parse_and_store(db: Session, feed: Feed, raw: bytes) -> dict:
             if ai_sum:
                 a.ai_summary = ai_sum
         db.commit()
+
+    # 清理缓存
+    if created > 0:
+        await clear_pattern("stats:*")
 
     return {
         "fetched": len(parsed.entries),
