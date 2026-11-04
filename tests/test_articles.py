@@ -161,3 +161,18 @@ def test_clean_old_articles(client, make_feed, make_article, db_session):
     assert r["deleted_count"] == 1
 
     assert client.get("/articles/stats").json()["total"] == 2
+
+
+def test_search_articles(client, make_feed, make_article):
+    f = make_feed()
+    make_article(f, title="用 FastAPI 构建应用", link="https://ex.com/1")
+    make_article(f, title="用 Django 构建应用", link="https://ex.com/2")
+
+    # 搜索 FastAPI
+    r = client.get("/articles/search?q=FastAPI").json()
+    assert r["meta"]["total"] == 1
+    assert "FastAPI" in r["items"][0]["title"]
+
+    # 搜索中文
+    r2 = client.get("/articles/search?q=构建").json()
+    assert r2["meta"]["total"] == 2

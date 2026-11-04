@@ -4,11 +4,17 @@ const state = {
     size: 15,
     filter: "all", // all | unread | starred
     totalPages: 1,
+    keyword: "",
 };
 
 const API_BASE = "/articles";
 
 // 工具函数
+function highlightKeyword(text, keyword) {
+    if (!keyword || !text) return text;
+    const regex = new RegExp(`(${keyword})`, "gi");
+    return text.replace(regex, '<mark>$1</mark>');
+}
 
 // 格式化时间
 function formatDate(isoString) {
@@ -30,12 +36,20 @@ async function fetchArticles() {
         page: state.page,
         size: state.size,
     });
-    if (state.filter === "unread") params.append("is_read", "false");
-    if (state.filter === "starred") params.append("is_starred", "true");
 
+    if (state.keyword) {
+        params.append("q", state.keyword);
+    } else {
+        if (state.filter === "unread") params.append("is_read", "false");
+        if (state.filter === "starred") params.append("is_starred", "true");
+    }
+
+    const fetchUrl = state.keyword
+        ? `/articles/search?${params.toString()}`
+        : `${API_BASE}?${params.toString()}`
     try{
         // 2. 请求 API
-        const res = await fetch(`${API_BASE}?${params.toString()}`);
+        const res = await fetch(fetchUrl);
         if (!res.ok) throw new Error("网络请求失败");
 
         const data = await res.json();
@@ -73,10 +87,10 @@ function renderArticles(items) {
                         <span class="ms-2"><i class="bi bi-clock"></i>${formatDate(item.published_at || item.fetched_at)}</span>
                     </div>
                     <a href="#" class="feed-title d-block text-truncate mb-1" style="max-width: 800px;" onclick="openArticle(${item.id}, event)">
-                        ${item.title}
+                        ${highlightKeyword(item.title, state.keyword)}
                     </a>
                     <div class="text-muted small text-truncate" style="max-width: 800px;">
-                        ${item.summary || "无摘要"}
+                        ${highlightKeyword(item.summary || "无摘要", state.keyword)}
                     </div>
                 </div>
                 <div class="d-flex gap-2">
@@ -124,6 +138,21 @@ function renderPagination(meta) {
 }
 
 // 交互操作
+// 绑定搜索事件
+function handleSearch() {
+    const q = document.getElementById("search-input").value.trim();
+    state.keyword = q;
+    state.page = 1;
+
+    if (q) {
+        document.getElementById("page-title").innerText = `搜索："${q}"`;
+    } else {
+        document.getElementById("page-title").innerText = "全部文章";
+    }
+
+    fetchArticles();
+}
+
 // 详情弹窗
 let articleModalInstance = null;
 
