@@ -6,6 +6,16 @@
 
 FeedHub 是一个基于 Python + FastAPI 构建的现代化 RSS 聚合阅读器。支持定时抓取、多源并发、文章过滤和可视化的数据看板。
 
+## 🏗️ 系统架构
+
+本项目采用现代 Web 应用架构，已实现全链路容器化部署：
+
+- **Web 层**：FastAPI (Uvicorn) 提供异步 RESTful API 与静态页面。
+- **数据层**：PostgreSQL (替代 SQLite, 支持高并发写入)。
+- **缓存层**：Redis (优化高频统计接口响应)。
+- **异步任务**：APScheduler (后台定时抓取) + Asyncio (并发 HTTP 抓取与 AI 摘要生成)。
+- **AI 能力**：接入兼容 OpenAI 格式的大模型接口，自动生成 3 句话。
+
 ## ✨ 核心特性
 
 - **⚡极速并发抓取**：使用 `httpx.AsyncClient` + `asyncio.gather` 实现多源并发抓取，避免慢源阻塞。
