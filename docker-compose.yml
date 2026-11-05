@@ -1,12 +1,44 @@
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: feedhub-db
+    environment:
+      POSTGRES_USER: feedhub
+      POSTGRES_PASSWORD: feedhub_pass
+      POSTGRES_DB: feedhub
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feedhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    container_name: feedhub-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    
   web:
     build: .
-    container_name: feedhub
+    container_name: feedhub-web
     ports:
       - "8000:8000"
-    env_file:
-      - .env
-    volumes:
-      # 把容器里的 /app/data 映射到本地的 ./data
-      - ./data:/app/data
+    environment:
+      - DATABASE_URL=postgresql+psycopg://feedhub:feedhub_pass@db:5432/feedhub
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=production_secret_key
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
+
+volumes:
+  pgdata:

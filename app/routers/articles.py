@@ -6,7 +6,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db import get_db
@@ -53,60 +53,38 @@ def search_articles(
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """FTS5 全文搜索。如果关键词长度 < 3, 退化为 LIKE 模糊查询（解决中文2字词或短英文搜不到的问题）。"""
-    # 1. 判断走 FTS 还是 LIKE
-    use_fts = len(q) >= 3
-    if use_fts:
-        # FTS 流程
-        safe_q = q.replace('"', '""')
-        fts_query = f'"{safe_q}"'
+    """F全文搜索(兼容版)。"""
+    like_q = f"%{q}%"
 
-        count_sql = text(
-            """SELECT COUNT(*) FROM article_fts WHERE article_fts MATCH :q"""
+    stmt = select(Article).where(
+        (Article.title.ilike(like_q))
+        | (Article.content.ilike(like_q))
+        | (Article.summary.ilike(like_q))
+    )
+
+    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+
+    offset = (page - 1) * size
+    articles = (
+        db.execute(
+            stmt.order_by(Article.published_at.desc()).limit(size).offset(offset)
         )
-        total = db.execute(count_sql, {"q": fts_query}).scalar_one()
+        .scalars()
+        .all()
+    )
 
-        offset = (page - 1) * size
-        search_sql = text("""
-            SELECT a.id FROM articles a JOIN article_fts f ON a.id = f.rowid
-            WHERE article_fts MATCH :q ORDER BY rank LIMIT :limit OFFSET :offset
-        """)
-        rows = db.execute(
-            search_sql, {"q": fts_query, "limit": size, "offset": offset}
-        ).all()
-        article_ids = [r[0] for r in rows]
-    else:
-        # LIKE 流程
-        like_q = f"%{q}%"
-        stmt = select(Article).where(
-            (Article.title.ilike(like_q))
-            | (Article.content.ilike(like_q))
-            | (Article.summary.ilike(like_q))
-        )
-        total = db.execute(
-            select(func.count()).select_from(stmt.subquery())
-        ).scalar_one()
+    article_ids = [a.id for a in articles]
 
-        offset = (page - 1) * size
-        articles = (
-            db.execute(
-                stmt.order_by(Article.published_at.desc()).limit(size).offset(offset)
-            )
-            .scalars()
-            .all()
-        )
-        article_ids = [a.id for a in articles]
-
-    # 2. 统一组装返回结果
     if not article_ids:
         items = []
     else:
-        stmt = (
+        # 关联加载 feed
+        stmt2 = (
             select(Article)
             .where(Article.id.in_(article_ids))
             .options(joinedload(Article.feed))
         )
-        articles_map = {a.id: a for a in db.execute(stmt).scalars().all()}
+        articles_map = {a.id: a for a in db.execute(stmt2).scalars().all()}
         items = [articles_map[aid] for aid in article_ids if aid in articles_map]
 
     pages = max(1, (total + size - 1) // size)
